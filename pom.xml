@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.h2tg</groupId>
+    <artifactId>MicroRASP</artifactId>
+    <version>0.1</version>
+    <packaging>jar</packaging>
+
+    <name>MicroRASP</name>
+    <description>Java Runtime Application Self-Protection with Byte Buddy</description>
+
+    <properties>
+        <maven.compiler.source>1.8</maven.compiler.source>
+        <maven.compiler.target>1.8</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <bytebuddy.version>1.14.12</bytebuddy.version>
+        <reflections.version>0.9.12</reflections.version>
+    </properties>
+
+    <dependencies>
+        <!-- Byte Buddy for runtime instrumentation -->
+        <dependency>
+            <groupId>net.bytebuddy</groupId>
+            <artifactId>byte-buddy</artifactId>
+            <version>${bytebuddy.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>net.bytebuddy</groupId>
+            <artifactId>byte-buddy-agent</artifactId>
+            <version>${bytebuddy.version}</version>
+        </dependency>
+
+        <!-- Reflections for annotation scanning -->
+        <dependency>
+            <groupId>org.reflections</groupId>
+            <artifactId>reflections</artifactId>
+            <version>${reflections.version}</version>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!-- Compiler plugin -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.11.0</version>
+                <configuration>
+                    <source>${maven.compiler.source}</source>
+                    <target>${maven.compiler.target}</target>
+                    <encoding>${project.build.sourceEncoding}</encoding>
+                </configuration>
+            </plugin>
+
+            <!-- Shade plugin to build fat JAR with all dependencies -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>3.5.1</version>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                        <configuration>
+                            <createDependencyReducedPom>false</createDependencyReducedPom>
+                            <shadedArtifactAttached>true</shadedArtifactAttached>
+                            <minimizeJar>false</minimizeJar>
+
+                            <!-- Relocate third-party libraries to avoid conflicts -->
+                            <relocations>
+                                <relocation>
+                                    <pattern>net.bytebuddy</pattern>
+                                    <shadedPattern>com.h2tg.rasp.shaded.net.bytebuddy</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>org.reflections</pattern>
+                                    <shadedPattern>com.h2tg.rasp.shaded.org.reflections</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>org.javassist</pattern>
+                                    <shadedPattern>com.h2tg.rasp.shaded.org.javassist</shadedPattern>
+                                </relocation>
+                            </relocations>
+
+                            <transformers>
+                                <!-- Preserve META-INF/services files -->
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+                                <!-- Configure MANIFEST.MF for Java Agent -->
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                                    <mainClass>com.h2tg.rasp.Main</mainClass>
+                                    <manifestEntries>
+                                        <Premain-Class>com.h2tg.rasp.Agent</Premain-Class>
+                                        <Agent-Class>com.h2tg.rasp.Agent</Agent-Class>
+                                        <Can-Redefine-Classes>true</Can-Redefine-Classes>
+                                        <Can-Retransform-Classes>true</Can-Retransform-Classes>
+                                        <Can-Set-Native-Method-Prefix>true</Can-Set-Native-Method-Prefix>
+                                        <Automatic-Module-Name>com.h2tg.rasp</Automatic-Module-Name>
+                                    </manifestEntries>
+                                </transformer>
+                            </transformers>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>

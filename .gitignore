@@ -1,0 +1,117 @@
+# Compiled class files
+*.class
+
+# Log files
+*.log
+
+# BlueJ files
+*.ctxt
+
+# Mobile Tools for Java (J2ME)
+.mtj.tmp/
+
+# Package Files
+*.jar
+*.war
+*.nar
+*.ear
+*.zip
+*.tar.gz
+*.rar
+
+# Virtual machine crash logs
+hs_err_pid*
+replay_pid*
+
+# Maven
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+.mvn/wrapper/maven-wrapper.jar
+
+# IDE - IntelliJ IDEA
+.idea/
+*.iws
+*.iml
+*.ipr
+out/
+!**/src/main/**/out/
+!**/src/test/**/out/
+
+# IDE - Eclipse
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+bin/
+!**/src/main/**/bin/
+!**/src/test/**/bin/
+
+# IDE - VSCode
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+# IDE - NetBeans
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+
+# Claude Code (AI assistant)
+.claude/
+CLAUDE.md
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+nul
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+*~.nib
+local.properties
+
+# Test output
+*.tgn
+
+# Gradle (if used in future)
+.gradle/
+build/
+
+# Agent test applications
+test-apps/
+demo/
+examples/target/
+
+# Development and testing
+*.orig
+*~
+.#*
+\#*#
+
+# Coverage reports
+coverage/
+*.gcov
+*.gcda
+*.gcno
+
+# Profiling data
+*.prof
+*.pprof
