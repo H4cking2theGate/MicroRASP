@@ -82,8 +82,8 @@
                                     <shadedPattern>com.h2tg.rasp.shaded.org.reflections</shadedPattern>
                                 </relocation>
                                 <relocation>
-                                    <pattern>org.javassist</pattern>
-                                    <shadedPattern>com.h2tg.rasp.shaded.org.javassist</shadedPattern>
+                                    <pattern>javassist</pattern>
+                                    <shadedPattern>com.h2tg.rasp.shaded.javassist</shadedPattern>
                                 </relocation>
                             </relocations>
 
