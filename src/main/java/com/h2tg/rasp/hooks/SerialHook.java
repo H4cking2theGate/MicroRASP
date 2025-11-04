@@ -20,16 +20,49 @@ public class SerialHook {
      * Hook for ObjectInputStream.resolveClass method
      * This method is called during deserialization to resolve class descriptors to actual classes.
      */
+//    @HookHandler(
+//            hookClass = "java.io.ObjectInputStream",
+//            hookMethod = "resolveClass",
+//            parameterTypes = {"java.io.ObjectStreamClass"}
+//    )
+//    public static class ResolveClassAdvice {
+//
+//        @Advice.OnMethodEnter
+//        static void onEnter(@Advice.Argument(0) Object desc) {
+//            String className = getClassName(desc);
+//            if (className == null || className.isEmpty()) {
+//                return;
+//            }
+//
+//            String matchedPattern = SerialHelper.checkDenyClass(className);
+//            if (matchedPattern == null) {
+//                return;
+//            }
+//
+//            Object request = RequestContext.getCurrentRequest();
+//            System.err.println("[MicroRASP] [BLOCKED] Dangerous deserialization: " + className);
+//            if (request != null) {
+//                RequestContext.logRequestInfo(request);
+//            }
+//
+//            throw new SecurityException("MicroRASP blocked dangerous deserialization: " + className);
+//        }
+//    }
+
+    /**
+     * Hook for ObjectInputStream.readClassDesc method
+     * This method is called when reading class descriptors from the stream.
+     * Provides broader coverage than resolveClass for deserialization detection.
+     */
     @HookHandler(
             hookClass = "java.io.ObjectInputStream",
-            hookMethod = "resolveClass",
-            parameterTypes = {"java.io.ObjectStreamClass"}
+            hookMethod = "readClassDesc"
     )
-    public static class ResolveClassAdvice {
+    public static class ReadClassDescAdvice {
 
-        @Advice.OnMethodEnter
-        static void onEnter(@Advice.Argument(0) Object desc) {
-            String className = getClassName(desc);
+        @Advice.OnMethodExit
+        static void onExit(@Advice.Return Object ret) {
+            String className = getClassName(ret);
             if (className == null || className.isEmpty()) {
                 return;
             }
