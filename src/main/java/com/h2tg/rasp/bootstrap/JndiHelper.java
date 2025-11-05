@@ -9,8 +9,8 @@ public class JndiHelper {
      * Dangerous class patterns for JNDI object factory
      */
     public static final String[] denyFactories = {
-            "org.apache.naming.factory.",
-//            "org.apache.naming.factory.BeanFactory",
+//            "org.apache.naming.factory.",
+            "org.apache.naming.factory.BeanFactory",
 //            "org.apache.naming.factory.ResourceFactory",
 //            "org.apache.naming.factory.LookupFactory",
 //            "org.apache.naming.factory.OpenEjbFactory",
