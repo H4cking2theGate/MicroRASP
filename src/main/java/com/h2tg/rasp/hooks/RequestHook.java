@@ -12,13 +12,15 @@ public class RequestHook {
 
     /**
      * Hook for javax.servlet.http.HttpServlet.service method (Java 8 / Spring Boot 2.x)
+     * Hooks the public service(ServletRequest, ServletResponse) which is the actual entry point
+     * for ALL requests including JSP pages.
      */
     @HookHandler(
             hookClass = "javax.servlet.http.HttpServlet",
             hookMethod = "service",
             parameterTypes = {
-                "javax.servlet.http.HttpServletRequest",
-                "javax.servlet.http.HttpServletResponse"
+                "javax.servlet.ServletRequest",
+                "javax.servlet.ServletResponse"
             }
     )
     public static class ServletServiceAdvice {
@@ -36,13 +38,15 @@ public class RequestHook {
 
     /**
      * Hook for jakarta.servlet.http.HttpServlet.service method (Java 11+ / Spring Boot 3.x)
+     * Hooks the public service(ServletRequest, ServletResponse) which is the actual entry point
+     * for ALL requests including JSP pages.
      */
     @HookHandler(
             hookClass = "jakarta.servlet.http.HttpServlet",
             hookMethod = "service",
             parameterTypes = {
-                "jakarta.servlet.http.HttpServletRequest",
-                "jakarta.servlet.http.HttpServletResponse"
+                "jakarta.servlet.ServletRequest",
+                "jakarta.servlet.ServletResponse"
             }
     )
     public static class JakartaServletServiceAdvice {
