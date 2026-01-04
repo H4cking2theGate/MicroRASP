@@ -1,258 +1,101 @@
 # MicroRASP
 
-[![Java](https://img.shields.io/badge/Java-8%2B-blue.svg)](https://www.oracle.com/java/)
-[![Byte Buddy](https://img.shields.io/badge/Byte%20Buddy-1.14.12-green.svg)](https://bytebuddy.net/)
-[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+轻量级 Java RASP Agent，基于 Byte Buddy，聚焦运行时拦截和实时阻断。支持以 Java Agent 方式零侵入部署，并自动扫描 `com.h2tg.rasp.hooks` 包中的 @HookHandler 进行织入。
 
-> **MicroRASP** 是一个轻量级的 Java 运行时应用自我保护（RASP）Agent，基于 Byte Buddy 实现，提供零侵入式的实时安全防护能力。
+## 亮点
+- Java Agent 零侵入：支持 `premain` / `agentmain`，可随 JVM 启动或动态 attach。
+- 上下文感知：Servlet/Jakarta Servlet 入口处记录请求上下文，部分 Hook 仅在 HTTP 请求中生效以降低误报。
+- 覆盖核心攻击面：反序列化、JNDI 注入、RMI 远程加载、命令执行、Native 库加载等。
+- 跨版本兼容：目标编译级别 Java 8；同时覆盖 `javax.servlet` 与 `jakarta.servlet`，并支持 JDK 8/11/17 的 native Hook。
+- 内置日志：`rasp-logs/microrasp.log`（可通过 `-Drasp.log.path` 修改），同时输出到控制台。
 
-## ✨ 特性
+## 已实现的 Hook 与行为
+| 攻击面 | Hook 点 | 触发条件 | 处置 | 备注 |
+| --- | --- | --- | --- | --- |
+| 请求上下文跟踪 | `javax.servlet.http.HttpServlet#service`<br>`jakarta.servlet.http.HttpServlet#service` | 所有 Servlet/JSP 请求 | 记录 ThreadLocal 请求对象 | 为其他 Hook 提供上下文 |
+| 命令执行 | `java.lang.ProcessImpl#create` (Win)<br>`ProcessImpl#forkAndExec` (JDK9+ Linux)<br>`java.lang.UNIXProcess#forkAndExec` (JDK8 Linux) | HTTP 请求上下文存在 | 抛出 `SecurityException` 阻断 | 非 Web 场景放行 |
+| Java 反序列化 | `java.io.ObjectInputStream#readClassDesc` | 解析类名命中 `SerialHelper.denyClasses` | 抛出 `SecurityException` 阻断 | 全场景拦截 |
+| JNDI 注入 | `javax.naming.spi.NamingManager#getObjectFactoryFromReference` | 存在远程 `codebase` 或命中 `JndiHelper.denyFactories` | 抛出 `SecurityException` 阻断 | |
+| RMI 远程加载 | `sun.rmi.server.LoaderHandler#lookupLoader` | 请求的 codebase 非空 | 抛出 `SecurityException` 阻断 | |
+| Native 库加载 | `jdk.internal.loader.NativeLibraries#load` (JDK9+)<br>`java.lang.ClassLoader.NativeLibrary#load` (JDK8) | 调用即触发 | 抛出 `SecurityException` 阻断 | 无白名单 |
+| 文件读写 | （代码存在于 `FileHook.java` 但已整体注释） | - | - | 需手动启用/完善 |
+| SQLi | `SqliHook` 占位 | - | - | 尚未实现 |
 
-- 🚀 **零侵入部署** - 通过 Java Agent 方式加载，无需修改应用代码
-- 🛡️ **多维度防护** - 覆盖反序列化、JNDI 注入、RMI、进程执行、Native 库加载等攻击面
-- 🔧 **灵活扩展** - 基于注解的 Hook 机制，支持快速添加自定义防护规则
-- ⚡ **性能优化** - 精准匹配目标方法，最小化运行时开销
-- 🌐 **跨版本兼容** - 支持 JDK 8 / JDK 11 / JDK 17+
-- 🎯 **上下文感知** - 只在 HTTP 请求上下文中拦截，避免误杀正常流程
+> 重要：JNDI/RMI/反序列化/Native Hook 默认全量阻断，可能影响依赖相关特性的业务；命令执行 Hook 仅在检测到 HTTP 请求上下文后阻断。
 
-## 📋 支持的攻击防护
-
-### ✅ 已实现
-
-| 攻击类型 | Hook 点 | 描述 | 状态 |
-|---------|---------|------|------|
-| **Java 反序列化** | `ObjectInputStream.resolveClass` | 拦截危险类的反序列化操作 | ✅ 已实现 |
-| **JNDI 注入** | `NamingManager.getObjectFactoryFromReference` | 检测远程 codebase 和危险工厂类 | ✅ 已实现 |
-| **RMI 远程加载** | `LoaderHandler.lookupLoader` | 阻止 RMI codebase 远程类加载 | ✅ 已实现 |
-| **命令执行** | `ProcessImpl.create` / `forkAndExec` | 阻止 HTTP 请求上下文中的进程执行 | ✅ 已实现 |
-| **Native 库加载** | `NativeLibraries.load` / `NativeLibrary.load` | 阻止动态加载恶意 Native 库 | ✅ 已实现 |
-| **HTTP 请求跟踪** | `HttpServlet.service` | 记录请求上下文，实现上下文感知防护 | ✅ 已实现 |
-
-### 🚧 计划中
-
-| 攻击类型 | 计划 Hook 点 | 描述 | 优先级 |
-|---------|-------------|------|--------|
-| **SQL 注入** | `Statement.execute*` / `PreparedStatement.execute*` | 检测和阻止 SQL 注入攻击 | 🔥 高 |
-| **文件操作** | `FileInputStream` / `FileOutputStream` / `RandomAccessFile` | 防止任意文件读写 | 🔥 高 |
-| **XXE 攻击** | `DocumentBuilder.parse` / `XMLReader.parse` | 防止 XML 外部实体注入 | 🔥 高 |
-| **SSRF 攻击** | `URL.openConnection` / `HttpURLConnection.connect` | 防止服务端请求伪造 | 🔥 高 |
-| **表达式注入** | `ScriptEngineManager.eval` / OGNL / SpEL | 防止代码注入和表达式注入 | 🔶 中 |
-| **反射调用** | `Method.invoke` / `Class.forName` | 监控危险的反射调用 | 🔶 中 |
-| **文件上传** | `FileUpload` / `MultipartFile` | 检测恶意文件上传 | 🔶 中 |
-| **模板注入** | Freemarker / Velocity / Thymeleaf | 防止模板注入攻击 | 🔶 中 |
-| **WebSocket** | WebSocket 连接和消息处理 | WebSocket 安全防护 | 🔷 低 |
-| **GraphQL** | GraphQL 查询执行 | GraphQL 注入防护 | 🔷 低 |
-
-## 🚀 快速开始
-
-### 1. 构建项目
-
+## 快速开始
+### 构建
 ```bash
-# 克隆项目
-git clone https://github.com/yourusername/MicroRASP.git
-cd MicroRASP
-
-# 使用 Maven 构建
 mvn clean package
-
-# 生成的 JAR 位于 target/ 目录
-# MicroRASP-0.1-shaded.jar
+# 产物：target/MicroRASP-0.1-shaded.jar
 ```
 
-### 2. 部署方式
-
-#### 方式一：JVM 启动时加载（推荐）
-
+### 以 Java Agent 启动（推荐）
 ```bash
-java -javaagent:/path/to/MicroRASP-0.1-shaded.jar -jar your-application.jar
+java -javaagent:/path/to/MicroRASP-0.1-shaded.jar -jar your-app.jar
 ```
 
-#### 方式二：动态 Attach（运行时加载）
-
+### 动态 Attach 示例
 ```java
 import com.sun.tools.attach.VirtualMachine;
 
 public class AttachAgent {
     public static void main(String[] args) throws Exception {
-        String pid = "12345";  // 目标 JVM 进程 PID
-        String agentJar = "/path/to/MicroRASP-0.1-shaded.jar";
-
-        VirtualMachine vm = VirtualMachine.attach(pid);
-        vm.loadAgent(agentJar);
+        VirtualMachine vm = VirtualMachine.attach("12345"); // 目标 JVM PID
+        vm.loadAgent("/path/to/MicroRASP-0.1-shaded.jar");
         vm.detach();
     }
 }
 ```
 
-### 3. 验证安装
-
-启动应用后，控制台会输出：
-
+启动后日志类似：
 ```
-[MicroRASP] ========================================
 [MicroRASP] MicroRASP Agent Starting...
-[MicroRASP] ========================================
-[MicroRASP] Injecting 3 class(es) to Bootstrap ClassLoader...
-[MicroRASP] Discovered 6 hook handler(s) in package com.h2tg.rasp.hooks
-[MicroRASP] Registered hook: target=java.io.ObjectInputStream#resolveClass
-[MicroRASP] Registered hook: target=javax.naming.spi.NamingManager#getObjectFactoryFromReference
-[MicroRASP] ========================================
+[MicroRASP] Injecting 4 class(es) to Bootstrap ClassLoader...
+[MicroRASP] Discovered X hook handler(s) in package com.h2tg.rasp.hooks
+[MicroRASP] Registered hook: target=java.io.ObjectInputStream#readClassDesc isNative=false ...
 [MicroRASP] MicroRASP Agent Installed Successfully
-[MicroRASP] ========================================
 ```
 
-## 🏗️ 架构设计
+## 工作原理
+1. `premain/agentmain` 入口调用 `Agent.install`。
+2. 将 `RequestContext`/`SerialHelper`/`JndiHelper`/`FileHelper` 注入 Bootstrap ClassLoader，解决跨 ClassLoader 访问。
+3. `HookRegistry` 使用 Reflections 扫描 `com.h2tg.rasp.hooks` 中的 `@HookHandler`，逐个注册到 Byte Buddy。
+4. Byte Buddy `AgentBuilder` 采用 `RETRANSFORMATION` 策略，忽略自身/依赖包并添加 `HookListener` 记录织入日志。
+5. 安装到目标 JVM 后，Advice 在运行时拦截方法并执行阻断/记录逻辑。
 
-### 核心组件
-
+### 代码结构
 ```
-MicroRASP
-├── Agent.java                      # Java Agent 入口，负责初始化和安装
-├── annotation/
-│   └── HookHandler.java            # Hook 注解，标记拦截点
+src/main/java/com/h2tg/rasp
+├── Agent.java                # Agent 安装流程，Bootstrap 注入与 Hook 注册
+├── Main.java                 # 占位 main，提示使用 -javaagent
+├── annotation/HookHandler.java
+├── bootstrap/                # 注入到 Bootstrap 的共享工具
+│   ├── RequestContext.java
+│   ├── SerialHelper.java
+│   ├── JndiHelper.java
+│   └── FileHelper.java
 ├── core/
-│   ├── HookRegistry.java           # Hook 注册中心，自动扫描和注册
-│   └── HookListener.java           # 转换监听器，记录插桩日志
-├── bootstrap/
-│   ├── RequestContext.java         # HTTP 请求上下文（Bootstrap ClassLoader）
-│   ├── SerialHelper.java           # 反序列化黑名单（Bootstrap ClassLoader）
-│   └── JndiHelper.java             # JNDI 安全检查（Bootstrap ClassLoader）
-├── hooks/
-│   ├── SerialHook.java             # 反序列化防护
-│   ├── JndiHook.java               # JNDI/RMI 注入防护
-│   ├── ProcessHook.java            # 命令执行防护
-│   ├── JNIHook.java                # Native 库加载防护
-│   └── RequestHook.java            # HTTP 请求上下文跟踪
-└── log/
-    └── MicroLogger.java            # 日志工具（基于 java.util.logging）
+│   ├── HookRegistry.java     # 扫描并注册 Advice
+│   └── HookListener.java     # Byte Buddy 织入日志
+├── hooks/                    # 具体 Hook（多数阻断逻辑内联）
+└── log/MicroLogger.java      # 控制台 + 文件日志，`-Drasp.log.path` 可重定向
 ```
 
-### 工作流程
+## 配置要点
+- 反序列化黑名单：编辑 `src/main/java/com/h2tg/rasp/bootstrap/SerialHelper.java` 的 `denyClasses`。
+- JNDI 工厂黑名单：编辑 `src/main/java/com/h2tg/rasp/bootstrap/JndiHelper.java` 的 `denyFactories`。
+- 日志路径：`-Drasp.log.path=/var/log/rasp`（默认相对路径 `rasp-logs`）。
+- FileHelper 黑名单：`FileHelper` 定义了敏感路径/后缀（用于未来文件 Hook），当前未生效。
 
-```
-1. Agent.premain/agentmain
-   ↓
-2. 注入 Bootstrap 类到 Bootstrap ClassLoader
-   ↓
-3. HookRegistry 扫描 @HookHandler 注解
-   ↓
-4. 构建 AgentBuilder（Byte Buddy）
-   ↓
-5. 注册所有 Hook 到 AgentBuilder
-   ↓
-6. 安装 Agent 到目标 JVM
-   ↓
-7. 运行时拦截目标方法，执行安全检查
-```
+## 兼容性与限制
+- 依赖 Byte Buddy 1.14.12，编译级别 Java 8；Native Hook 已适配 JDK8 与 JDK9+ 的不同类名。
+- JNDI/RMI/反序列化/Native Hook 默认强阻断，需在生产前验证第三方组件依赖。
+- 命令执行 Hook 仅在 HTTP 请求上下文中阻断；非 Web 应用默认放行。
+- 文件读写 Hook 代码目前整文件注释，SqliHook 为占位，尚未提供 SQL/文件防护。
+- 暂无开关化配置与白名单，若需灰度/放行策略需自行扩展。
 
-## 🔧 自定义 Hook
-
-### 1. 创建 Hook 类
-
-```java
-package com.h2tg.rasp.hooks;
-
-import com.h2tg.rasp.annotation.HookHandler;
-import com.h2tg.rasp.bootstrap.RequestContext;
-import net.bytebuddy.asm.Advice;
-
-public class CustomHook {
-
-    @HookHandler(
-            hookClass = "com.example.TargetClass",
-            hookMethod = "dangerousMethod",
-            parameterTypes = {"java.lang.String"}
-    )
-    public static class DangerousMethodAdvice {
-
-        @Advice.OnMethodEnter
-        static void onEnter(@Advice.Argument(0) String input) {
-            Object request = RequestContext.getCurrentRequest();
-            if (request == null) {
-                return;  // 非 HTTP 请求，放行
-            }
-
-            // 自定义安全检查逻辑
-            if (isBlacklisted(input)) {
-                System.err.println("[MicroRASP] [BLOCKED] Dangerous input: " + input);
-                RequestContext.logRequestInfo(request);
-                throw new SecurityException("MicroRASP blocked dangerous input: " + input);
-            }
-        }
-
-        private static boolean isBlacklisted(String input) {
-            // 实现黑名单检查
-            return input.contains("malicious");
-        }
-    }
-}
-```
-
-### 2. @HookHandler 注解参数
-
-| 参数 | 类型 | 说明 | 默认值 |
-|-----|------|------|--------|
-| `hookClass` | String | 目标类的完全限定名 | - |
-| `hookMethod` | String | 目标方法名 | - |
-| `parameterTypes` | String[] | 方法参数类型（完全限定名） | `{"*"}` |
-| `isConstructor` | boolean | 是否为构造方法 | `false` |
-| `isNative` | boolean | 是否为 Native 方法 | `false` |
-
-### 3. 重新构建并部署
-
-```bash
-mvn clean package
-java -javaagent:target/MicroRASP-0.1-shaded.jar -jar your-app.jar
-```
-
-## 📝 配置说明
-
-### 反序列化黑名单
-
-编辑 `SerialHelper.java` 中的 `denyClasses` 数组：
-
-```java
-public static final String[] denyClasses = {
-    "com.sun.rowset.",              // JNDI 注入
-    "org.apache.commons.collections.functors.",  // Commons Collections
-    "org.springframework.beans.factory.",        // Spring RCE
-    "java.lang.Runtime",            // 命令执行
-    // 添加自定义黑名单...
-};
-```
-
-### JNDI 工厂类黑名单
-
-编辑 `JndiHelper.java` 中的 `denyFactories` 数组：
-
-```java
-public static final String[] denyFactories = {
-    "org.apache.naming.factory.",
-    "com.alibaba.druid.pool.DruidDataSourceFactory",
-    "org.apache.tomcat.jdbc.pool.DataSourceFactory",
-    // 添加自定义黑名单...
-};
-```
-
-## 🧪 测试结果
-
-### Hook 功能测试结果
-
-| Hook 类型 | Spring Boot 2.x + JDK8 | Spring Boot 2.x + JDK17 | Spring Boot 3.x + JDK17 | Tomcat 9.x + JDK8 | Tomcat 10.x + JDK17 |
-|----------|-----------|-------------|------------|--------------|--------------|
-| **SerialHook** | ✅ 测试通过 | ✅ 测试通过 | ✅ 测试通过 | ⚠️ 待测试 |  |
-| **JndiHook** | ✅ 测试通过 | ✅ 测试通过 | ✅ 测试通过 | ⚠️ 待测试 |  |
-| **RMIHook** | ⚠️ 待测试 | ⚠️ 待测试 | ⚠️ 待测试 | ⚠️ 待测试 |  |
-| **ProcessHook** | ✅ 测试通过 | ✅ 测试通过 | ✅ 测试通过 | N/A |  |
-| **JNIHook ** | ⚠️ 待测试 | ⚠️ 待测试 | ⚠️ 待测试 | ⚠️ 待测试 | ⚠️ 待测试 |
-| **RequestHook ** | ✅ 测试通过 | ✅ 测试通过 | ✅ 测试通过 | ⚠️ 待测试 |  |
-
-**图例**: ✅ 测试通过 | ❌ 测试失败 | ⚠️ 待测试 | N/A 不适用
-
-## ⚠️ 注意事项
-
-1. **生产环境部署前请充分测试**，确保不影响业务逻辑
-2. **上下文感知防护**仅在 HTTP 请求中生效，非 Web 应用需调整逻辑
-3. **黑名单规则**需根据实际业务场景调整，避免误报
-4. **Native 方法 Hook** 可能影响部分 JVM 优化，建议性能测试
-5. **日志输出**使用 `System.err`，生产环境建议配置日志重定向
+## 开发与验证建议
+- 构建：`mvn clean package`，产物 `target/MicroRASP-0.1-shaded.jar` 已带 Manifest（Premain/Agent-Class）。
+- 最小验证：在 Web 应用中访问 Servlet/JSP，触发 `RequestHook` 后再执行 `Runtime.exec` 观察阻断；尝试反序列化/恶意 JNDI URL 验证拦截效果。
+- 性能/兼容性：在目标 JDK 版本、容器（Tomcat/Spring Boot）上分别验证是否有误报或启动冲突，必要时调整黑名单或放宽策略。
